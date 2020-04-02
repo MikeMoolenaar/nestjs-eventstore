@@ -203,7 +203,7 @@ export class EventStoreBus {
       return;
     }
     const data = Object.values(JSON.parse(event.data.toString()));
-    this.subject$.next(this.eventHandlers[event.eventType](...data));
+    this.subject$.next(this.eventHandlers[event.eventType](data));
   }
 
   onDropped(
