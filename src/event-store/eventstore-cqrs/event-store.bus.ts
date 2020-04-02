@@ -202,7 +202,7 @@ export class EventStoreBus {
       this.logger.error('Received event that could not be handled!');
       return;
     }
-    const data = Object.values(JSON.parse(event.data.toString()));
+    const data = JSON.parse(event.data.toString());
     this.subject$.next(this.eventHandlers[event.eventType](data));
   }
 
