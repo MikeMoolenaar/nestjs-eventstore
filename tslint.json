@@ -8,10 +8,6 @@
       "check-format",
       "allow-leading-underscore",
       "allow-pascal-case"
-    ],
-    "linebreak-style": [
-      true,
-      "LF"
     ]
   },
   "rulesDirectory": []
