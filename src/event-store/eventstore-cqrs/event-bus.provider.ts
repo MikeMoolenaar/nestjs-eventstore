@@ -4,7 +4,6 @@ import { Observable, Subscription } from 'rxjs';
 import { filter } from 'rxjs/operators';
 import { isFunction } from 'util';
 import {
-  IEventHandler,
   IEvent,
   ObservableBus,
   CommandBus,
@@ -15,9 +14,11 @@ import {
   SAGA_METADATA,
   EVENTS_HANDLER_METADATA,
 } from '@nestjs/cqrs/dist/decorators/constants';
-import { EventStoreBus, IEventConstructors } from './event-store.bus';
+import { EventStoreBus } from './event-store.bus';
 import { EventStore } from '../event-store.class';
 import { CqrsOptions } from '@nestjs/cqrs/dist/interfaces/cqrs-options.interface';
+import { IEventHandler } from '../shared/event-handler.interface';
+import { IEventMetaData } from '../shared/event.interface';
 
 export enum EventStoreSubscriptionType {
   Persistent,
@@ -45,16 +46,16 @@ export type EventStoreSubscription =
 
 export type EventStoreBusConfig = {
   subscriptions: EventStoreSubscription[];
-  eventInstantiators: IEventConstructors;
 };
 
 export type EventHandlerType = Type<IEventHandler<IEvent>>;
 
 @Injectable()
-export class EventBusProvider extends ObservableBus<IEvent>
+export class EventBusProvider extends ObservableBus<{ event: IEvent, eventMetaData: IEventMetaData }>
   implements OnModuleDestroy {
   private _publisher: EventStoreBus;
   private readonly subscriptions: Subscription[];
+  private readonly subscriptionEventNames: string[] = [];
   private readonly cqrsOptions: CqrsOptions;
 
   constructor(
@@ -89,8 +90,11 @@ export class EventBusProvider extends ObservableBus<IEvent>
   }
 
   bind(handler: IEventHandler<IEvent>, name: string) {
-    const stream$ = name ? this.ofEventName(name) : this.subject$;
-    const subscription = stream$.subscribe(event => handler.handle(event));
+    const subscription = this.ofEventName(name).subscribe((event) => {
+      console.log('resolved!');
+      handler.handle(event.event, event.eventMetaData);
+    });
+    this.subscriptionEventNames.push(name);
     this.subscriptions.push(subscription);
   }
 
@@ -126,13 +130,8 @@ export class EventBusProvider extends ObservableBus<IEvent>
 
   protected ofEventName(name: string) {
     return this.subject$.pipe(
-      filter(event => this.getEventName(event) === name),
+      filter(event => event.eventMetaData.eventName === name),
     );
-  }
-
-  private getEventName(event): string {
-    const { constructor } = Object.getPrototypeOf(event);
-    return constructor.name as string;
   }
 
   protected registerSaga(saga: ISaga) {
@@ -159,6 +158,7 @@ export class EventBusProvider extends ObservableBus<IEvent>
     const pubSub = new EventStoreBus(
       this.eventStore,
       this.subject$,
+      this.subscriptionEventNames,
       this.config,
     );
     this._publisher = pubSub;

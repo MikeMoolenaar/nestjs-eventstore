@@ -16,10 +16,7 @@ import {
   EventStorePersistentSubscription as ESPersistentSubscription,
   EventStoreCatchupSubscription as ESCatchUpSubscription,
 } from './event-bus.provider';
-
-export interface IEventConstructors {
-  [key: string]: (...args: any[]) => IEvent;
-}
+import { IEventMetaData } from '../shared/event.interface';
 
 interface ExtendedCatchUpSubscription extends EventStoreCatchUpSubscription {
   isLive: boolean | undefined;
@@ -31,7 +28,6 @@ interface ExtendedPersistentSubscription
 }
 
 export class EventStoreBus {
-  private eventHandlers: IEventConstructors;
   private logger = new Logger('EventStoreBus');
   private catchupSubscriptions: ExtendedCatchUpSubscription[] = [];
   private catchupSubscriptionsCount: number;
@@ -41,10 +37,10 @@ export class EventStoreBus {
 
   constructor(
     private eventStore: EventStore,
-    private subject$: Subject<IEvent>,
+    private subject$: Subject<{ event: IEvent, eventMetaData: IEventMetaData }>,
+    private subscriptionEventNames: string[],
     config: EventStoreBusConfig,
   ) {
-    this.addEventHandlers(config.eventInstantiators);
 
     const catchupSubscriptions = config.subscriptions.filter((sub) => {
       return sub.type === EventStoreSubscriptionType.CatchUp;
@@ -197,14 +193,26 @@ export class EventStoreBus {
       this.logger.error('Received event that could not be resolved!');
       return;
     }
-    const handler = this.eventHandlers[event.eventType];
-    if (!handler) {
-      this.logger.error('Received event that could not be handled!');
+
+    if (!this.subscriptionEventNames.some(name => name === event.eventType)) {
+      this.logger.error('Received event that could not be handled by any of the provided event handlers!');
       return;
     }
+
     const data = JSON.parse(event.data.toString());
-    const metadata = JSON.parse(event.metadata.toString());
-    this.subject$.next(this.eventHandlers[event.eventType](data, metadata, event.eventId, event.eventStreamId, new Date(event.created)));
+    const metadata = event.metadata.length > 0 ? JSON.parse(event.metadata.toString()) : null;
+
+    const eventMetaData: IEventMetaData = {
+      eventName: event.eventType,
+      streamMetaData: metadata,
+      eventNumber: event.eventNumber,
+      eventId: event.eventId,
+      eventStreamId: event.eventStreamId,
+      dateCreated: new Date(event.created),
+    };
+    console.log('submitted!');
+    // tslint:disable-next-line:object-shorthand-properties-first
+    this.subject$.next({ event: data, eventMetaData });
   }
 
   onDropped(
@@ -219,9 +227,5 @@ export class EventStoreBus {
   onLiveProcessingStarted(subscription: ExtendedCatchUpSubscription) {
     subscription.isLive = true;
     this.logger.log('Live processing of EventStore events started!');
-  }
-
-  addEventHandlers(eventHandlers: IEventConstructors) {
-    this.eventHandlers = { ...this.eventHandlers, ...eventHandlers };
   }
 }
