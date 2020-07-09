@@ -2,7 +2,7 @@
 export interface IEventMetaData{
   eventName: string;
   streamMetaData?: any;
-  eventNumber: Long;
+  eventNumber: number;
   eventId: string;
   eventStreamId: string;
   dateCreated: Date;
